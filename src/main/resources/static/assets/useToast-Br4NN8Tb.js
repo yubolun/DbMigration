@@ -1,0 +1,1 @@
+import{P as e}from"./SvgIcon-BENwPW_g.js";var t=e(null);function n(){return{success:e=>t.value?.success(e),error:e=>t.value?.error(e),info:e=>t.value?.info(e),warning:e=>t.value?.warning(e)}}export{n,t};

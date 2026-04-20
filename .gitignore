@@ -1,0 +1,99 @@
+# ============================================================
+# DB Migration — .gitignore
+# ============================================================
+
+# ── Maven ────────────────────────────────────────────────────
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+# ── Compiled / Class files ───────────────────────────────────
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+*.zip
+*.tar.gz
+*.rar
+
+# ── Spring Boot / Application Config (sensitive) ─────────────
+# Keep application.yml template; ignore environment overrides
+src/main/resources/application-local.yml
+src/main/resources/application-dev.yml
+src/main/resources/application-prod.yml
+src/main/resources/application-test.yml
+*.env
+.env.*
+
+# ── Logs ─────────────────────────────────────────────────────
+logs/
+*.log
+*.log.*
+log/
+
+# ── Frontend (Vue / Node) ─────────────────────────────────────
+frontend/node_modules/
+frontend/dist/
+frontend/.output/
+frontend/.nuxt/
+frontend/.vite/
+frontend/.eslintcache
+frontend/coverage/
+
+# ── IDE — IntelliJ IDEA ───────────────────────────────────────
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+.idea_modules/
+
+# ── IDE — VS Code ─────────────────────────────────────────────
+.vscode/
+!.vscode/extensions.json
+
+# ── IDE — Eclipse ─────────────────────────────────────────────
+.classpath
+.project
+.settings/
+.factorypath
+bin/
+
+# ── IDE — NetBeans ────────────────────────────────────────────
+nbproject/private/
+build/
+nbbuild/
+dist/
+nbdist/
+.nb-gradle/
+
+# ── macOS ─────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+
+# ── Windows ───────────────────────────────────────────────────
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+Desktop.ini
+
+# ── Linux ─────────────────────────────────────────────────────
+*~
+
+# ── Docker ────────────────────────────────────────────────────
+docker-compose.override.yml
+
+# ── Test & Coverage ───────────────────────────────────────────
+*.exec
+*.xml.bak
+surefire-reports/
+
+# ── Misc ──────────────────────────────────────────────────────
+*.swp
+*.swo
+.antigravityignore

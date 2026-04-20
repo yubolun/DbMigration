@@ -1,0 +1,86 @@
+server:
+  port: 8520
+
+spring:
+  application:
+    name: db-migration
+  datasource:
+    type: com.alibaba.druid.pool.DruidDataSource
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/db_migration?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: root
+    password: 123456
+    druid:
+      initial-size: 5
+      min-idle: 5
+      # 并行同步时每个数据源最多同时占用 sync.table-concurrency 个连接，
+      # 建议 max-active >= sync.table-concurrency * 2 + 10（留余量给业务查询）
+      max-active: 50
+      max-wait: 60000
+      time-between-eviction-runs-millis: 60000
+      min-evictable-idle-time-millis: 300000
+      validation-query: SELECT 1
+      test-while-idle: true
+      test-on-borrow: false
+      test-on-return: false
+      stat-view-servlet:
+        enabled: true
+        url-pattern: /druid/*
+        login-username: admin
+        login-password: admin123
+      filter:
+        stat:
+          enabled: true
+          slow-sql-millis: 2000
+          log-slow-sql: false
+          merge-sql: false
+        wall:
+          enabled: true
+          config:
+            # 允许Oracle系统包 DBMS_METADATA等
+            object-check: false
+            # 允许多语句执行
+            multi-statement-allow: true
+
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:db/schema.sql
+      continue-on-error: true
+
+  threads:
+    virtual:
+      enabled: true
+
+mybatis-plus:
+  mapper-locations: classpath:mapper/**/*.xml
+  global-config:
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+
+# AES encryption key (Base64 encoded 256-bit key)
+# WARNING: Change this in production and inject via environment variable!
+app:
+  aes-key: ZGJNaWdyYXRpb25BZXNLZXkxMjM0NTY3OA==
+
+# ── 同步引擎配置 ───────────────────────────────────────────────
+sync:
+  # 全库/按需/纯数据 同步时，最多并行处理的表数量（Virtual Threads）
+  # 每张表需占用 2 个 DB 连接（源库 + 目标库），请确保：
+  #   druid.max-active >= table-concurrency * 2 + 10
+  # 当前 max-active=50，最大并发可设为 20
+  table-concurrency: 8
+
+logging:
+  level:
+    com.dbmigration: DEBUG
+    com.alibaba.druid: WARN
+    org.mybatis.spring: WARN
+    org.apache.ibatis: WARN
+    org.springframework.jdbc: WARN
