@@ -164,10 +164,36 @@ const showError = (log) => {
 
 const copyError = async () => {
   try {
-    await navigator.clipboard.writeText(errorModal.value.message)
-    toast.success('已复制到剪贴板')
+    const text = errorModal.value.message || ''
+    if (!text) {
+      toast.error('没有可复制的内容')
+      return
+    }
+
+    // 尝试使用现代 Clipboard API
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text)
+      toast.success('已复制到剪贴板')
+    } else {
+      // 降级方案：使用传统的 execCommand 方法
+      const textarea = document.createElement('textarea')
+      textarea.value = text
+      textarea.style.position = 'fixed'
+      textarea.style.opacity = '0'
+      document.body.appendChild(textarea)
+      textarea.select()
+      const success = document.execCommand('copy')
+      document.body.removeChild(textarea)
+
+      if (success) {
+        toast.success('已复制到剪贴板')
+      } else {
+        toast.error('复制失败，请手动复制')
+      }
+    }
   } catch (e) {
-    toast.error('复制失败')
+    console.error('Copy error:', e)
+    toast.error('复制失败：' + e.message)
   }
 }
 

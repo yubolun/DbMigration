@@ -97,3 +97,5 @@ surefire-reports/
 *.swp
 *.swo
 .antigravityignore
+
+.claude
