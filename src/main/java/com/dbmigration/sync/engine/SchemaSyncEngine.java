@@ -214,12 +214,15 @@ public class SchemaSyncEngine {
             log.info("目标表已存在, 跳过: {}", targetTableName);
             return;
         }
-        if ("DROP_AND_CREATE".equals(strategy)) {
-            String dropSql = "DROP TABLE IF EXISTS " + targetDialect.quoteIdentifier(targetTableName);
+        if ("DROP_AND_CREATE".equals(strategy) && exists) {
+            // Oracle 不支持 DROP TABLE IF EXISTS，需要先检查表是否存在
+            String dropSql = targetDialect.buildDropTableSql(targetTableName);
             try (Statement stmt = targetConn.createStatement()) {
                 stmt.execute(dropSql);
+                log.info("已删除目标表: {}", targetTableName);
+            } catch (Exception e) {
+                log.warn("删除表失败(可能不存在): {} - {}", targetTableName, e.getMessage());
             }
-            if (exists) log.info("已删除目标表: {}", targetTableName);
         }
 
         // 读取源表列信息
@@ -260,18 +263,30 @@ public class SchemaSyncEngine {
         try (Statement commentStmt = targetConn.createStatement()) {
             // 表注释
             if (tableComment != null && !tableComment.isBlank()) {
-                String commentSql = targetDialect.buildTableCommentSql(targetTableName, tableComment);
-                if (commentSql != null) {
-                    commentStmt.execute(commentSql);
-                    log.debug("表注释已同步: {} -> {}", targetTableName, tableComment);
+                try {
+                    String commentSql = targetDialect.buildTableCommentSql(targetTableName, tableComment);
+                    if (commentSql != null) {
+                        log.debug("执行表注释 SQL: {}", commentSql);
+                        commentStmt.execute(commentSql);
+                        log.debug("表注释已同步: {} -> {}", targetTableName, tableComment);
+                    }
+                } catch (Exception e) {
+                    log.warn("表注释同步失败: {} - {} SQL: {}", targetTableName, e.getMessage(),
+                            targetDialect.buildTableCommentSql(targetTableName, tableComment));
                 }
             }
             // 列注释
             for (ColumnMeta col : columns) {
                 if (col.getComment() != null && !col.getComment().isBlank()) {
-                    String colCommentSql = targetDialect.buildColumnCommentSql(targetTableName, col.getColumnName(), col.getComment());
-                    if (colCommentSql != null) {
-                        commentStmt.execute(colCommentSql);
+                    try {
+                        String colCommentSql = targetDialect.buildColumnCommentSql(targetTableName, col.getColumnName(), col.getComment());
+                        if (colCommentSql != null) {
+                            log.debug("执行列注释 SQL: {}", colCommentSql);
+                            commentStmt.execute(colCommentSql);
+                        }
+                    } catch (Exception e) {
+                        log.warn("列注释同步失败: {}.{} - {} SQL: {}", targetTableName, col.getColumnName(), e.getMessage(),
+                                targetDialect.buildColumnCommentSql(targetTableName, col.getColumnName(), col.getComment()));
                     }
                 }
             }
@@ -330,7 +345,10 @@ public class SchemaSyncEngine {
         // DROP_AND_CREATE 策略先尝试删除
         if ("DROP_AND_CREATE".equals(strategy)) {
             try (Statement stmt = targetConn.createStatement()) {
-                stmt.execute("DROP VIEW IF EXISTS " + targetDialect.quoteIdentifier(targetViewName));
+                // Oracle 不支持 DROP VIEW IF EXISTS，直接 DROP 并捕获异常
+                String dropSql = targetDialect.buildDropViewSql(targetViewName);
+                stmt.execute(dropSql);
+                log.debug("已删除视图: {}", targetViewName);
             } catch (Exception e) {
                 log.debug("DROP VIEW {} 忽略错误: {}", targetViewName, e.getMessage());
             }
@@ -352,7 +370,7 @@ public class SchemaSyncEngine {
             } catch (Exception ignored) {}
         } catch (Exception e) {
             log.warn("同步视图 '{}' 失败，尝试通过兜底机制创建空视图. 原错误: {}", targetViewName, e.getMessage());
-            
+
             // 出现异常时，回滚到 Savepoint 清除 Aborted 状态，才能继续执行空视图的创建
             try {
                 if (savepoint != null) {
@@ -360,6 +378,15 @@ public class SchemaSyncEngine {
                 }
             } catch (Exception rollbackEx) {
                 log.warn("回滚视图 Savepoint 失败: {}", rollbackEx.getMessage());
+            }
+
+            // 先尝试删除可能存在的视图（避免 ORA-00955 错误）
+            try (Statement dropStmt = targetConn.createStatement()) {
+                String dropSql = targetDialect.buildDropViewSql(targetViewName);
+                dropStmt.execute(dropSql);
+                log.debug("删除已存在的视图: {}", targetViewName);
+            } catch (Exception dropEx) {
+                log.debug("删除视图失败(可能不存在): {}", dropEx.getMessage());
             }
 
             String emptyViewSql = "CREATE VIEW " + targetDialect.quoteIdentifier(targetViewName) + " AS SELECT 1 AS empty_view_fallback";

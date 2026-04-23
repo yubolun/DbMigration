@@ -74,6 +74,24 @@ public interface DbDialect {
     }
 
     /**
+     * 构建 DROP TABLE SQL
+     * 不同数据库对 IF EXISTS 的支持不同
+     */
+    default String buildDropTableSql(String tableName) {
+        // 默认使用标准 SQL（MySQL/PostgreSQL/GaussDB 支持）
+        return "DROP TABLE IF EXISTS " + quoteIdentifier(tableName);
+    }
+
+    /**
+     * 构建 DROP VIEW SQL
+     * 不同数据库对 IF EXISTS 的支持不同
+     */
+    default String buildDropViewSql(String viewName) {
+        // 默认使用标准 SQL（MySQL/PostgreSQL/GaussDB 支持）
+        return "DROP VIEW IF EXISTS " + quoteIdentifier(viewName);
+    }
+
+    /**
      * 引用标识符（表名、列名加引号）
      */
     String quoteIdentifier(String identifier);
@@ -187,10 +205,18 @@ public interface DbDialect {
     }
 
     /**
-     * 转义注释中的单引号
+     * 转义注释中的单引号和特殊字符
      */
     default String escapeComment(String comment) {
-        if (comment == null) return "";
-        return comment.replace("'", "''");
+        if (comment == null || comment.isBlank()) return "";
+        // 替换单引号为两个单引号（SQL 标准转义）
+        // 移除换行符、回车符等可能导致 SQL 语法错误的字符
+        return comment.replace("'", "''")
+                      .replace("\n", " ")
+                      .replace("\r", " ")
+                      .replace("\t", " ")
+                      .replace("\0", "")  // 移除 NULL 字符
+                      .replaceAll("\\s+", " ")
+                      .trim();
     }
 }

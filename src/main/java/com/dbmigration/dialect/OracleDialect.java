@@ -154,6 +154,20 @@ public class OracleDialect implements DbDialect {
         return "\"" + identifier.toUpperCase() + "\"";
     }
 
+    @Override
+    public String buildDropTableSql(String tableName) {
+        // Oracle 不支持 IF EXISTS（12c 之前），直接 DROP
+        // 调用方需要先检查表是否存在，或者捕获异常
+        return "DROP TABLE " + quoteIdentifier(tableName);
+    }
+
+    @Override
+    public String buildDropViewSql(String viewName) {
+        // Oracle 不支持 DROP VIEW IF EXISTS，直接 DROP
+        // 调用方需要先检查视图是否存在，或者捕获异常
+        return "DROP VIEW " + quoteIdentifier(viewName);
+    }
+
     private String buildOracleFullType(String dataType, int precision, int scale, int length) {
         if ("NUMBER".equalsIgnoreCase(dataType)) {
             if (precision > 0) return scale > 0 ? "NUMBER(" + precision + "," + scale + ")" : "NUMBER(" + precision + ")";
@@ -237,5 +251,34 @@ public class OracleDialect implements DbDialect {
             }
         }
         return null;
+    }
+
+    @Override
+    public String buildTableCommentSql(String tableName, String comment) {
+        // Oracle COMMENT ON 语法：注释为空时使用空字符串而不是 NULL
+        // 注意：tableName 已经通过 quoteIdentifier 处理过，会自动转为大写并加引号
+        if (comment == null || comment.isBlank()) {
+            return "COMMENT ON TABLE " + quoteIdentifier(tableName) + " IS ''";
+        }
+        String escaped = escapeComment(comment);
+        // 如果转义后为空，使用空字符串
+        if (escaped.isEmpty()) {
+            return "COMMENT ON TABLE " + quoteIdentifier(tableName) + " IS ''";
+        }
+        return "COMMENT ON TABLE " + quoteIdentifier(tableName) + " IS '" + escaped + "'";
+    }
+
+    @Override
+    public String buildColumnCommentSql(String tableName, String columnName, String comment) {
+        // Oracle COMMENT ON COLUMN 语法：注释为空时使用空字符串
+        if (comment == null || comment.isBlank()) {
+            return "COMMENT ON COLUMN " + quoteIdentifier(tableName) + "." + quoteIdentifier(columnName) + " IS ''";
+        }
+        String escaped = escapeComment(comment);
+        if (escaped.isEmpty()) {
+            return "COMMENT ON COLUMN " + quoteIdentifier(tableName) + "." + quoteIdentifier(columnName) + " IS ''";
+        }
+        return "COMMENT ON COLUMN " + quoteIdentifier(tableName) + "." + quoteIdentifier(columnName)
+                + " IS '" + escaped + "'";
     }
 }
