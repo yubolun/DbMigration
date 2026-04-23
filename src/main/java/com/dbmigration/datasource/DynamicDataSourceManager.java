@@ -4,10 +4,13 @@ import com.alibaba.druid.pool.DruidDataSource;
 import com.dbmigration.common.AesUtils;
 import com.dbmigration.common.DbType;
 import com.dbmigration.datasource.entity.DataSourceConfig;
+import com.dbmigration.datasource.mapper.DataSourceMapper;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.sql.Connection;
+import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Map;
 import java.util.Set;
@@ -19,9 +22,11 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class DynamicDataSourceManager {
 
     private final Map<Long, DruidDataSource> dataSourceMap = new ConcurrentHashMap<>();
+    private final DataSourceMapper dataSourceMapper;
 
     /**
      * 注册数据源（创建 Druid 连接池）
@@ -106,18 +111,49 @@ public class DynamicDataSourceManager {
 
     /**
      * 获取连接并切换到指定 Database/Schema
+     *
+     * 重要：当指定了 schema 参数时，会创建一个新的直连（不使用连接池），
+     * 并使用该 schema 作为数据库名构建 JDBC URL，从而真正连接到指定的数据库。
+     * 这样可以确保忽略数据源配置中的 dbName，使用同步任务中指定的数据库名。
      */
     public Connection getConnection(Long dsId, String schema) throws SQLException {
-        Connection conn = getConnection(dsId);
-        if (schema != null && !schema.isBlank()) {
+        // 如果没有指定 schema，或者 schema 为空，使用默认连接池
+        if (schema == null || schema.isBlank()) {
+            return getConnection(dsId);
+        }
+
+        // 如果指定了 schema，创建一个使用该 schema 的新连接
+        // 这样可以确保真正连接到指定的数据库，而不是数据源配置中的数据库
+        DataSourceConfig config = dataSourceMapper.selectById(dsId);
+        if (config == null) {
+            throw new IllegalArgumentException("数据源不存在: id=" + dsId);
+        }
+
+        try {
+            DbType dbType = DbType.valueOf(config.getDbType());
+            String password = AesUtils.decrypt(config.getPassword());
+
+            // 使用指定的 schema 构建 JDBC URL，而不是使用配置中的 dbName
+            String jdbcUrl = dbType.buildUrl(config.getHost(), config.getPort(), schema, config.getExtraParams());
+
+            log.debug("使用指定 schema 创建连接: dsId={}, schema={}, url={}", dsId, schema, jdbcUrl);
+
+            // 创建直连（不使用连接池）
+            Connection conn = DriverManager.getConnection(jdbcUrl, config.getUsername(), password);
+
+            // 对于某些数据库，还需要显式设置 catalog/schema
             try {
                 conn.setCatalog(schema);
             } catch (Exception ignored) {}
             try {
                 conn.setSchema(schema);
             } catch (Exception ignored) {}
+
+            return conn;
+        } catch (Exception e) {
+            log.error("创建指定 schema 的连接失败: dsId={}, schema={}", dsId, schema, e);
+            throw new SQLException("创建连接失败: " + e.getMessage(), e);
         }
-        return conn;
     }
 
     /**

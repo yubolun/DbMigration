@@ -115,6 +115,7 @@ const formatTime = (t) => {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  height: 100%;
 }
 .ds-card:hover {
   transform: translateY(-3px);
@@ -222,6 +223,8 @@ const formatTime = (t) => {
   flex-direction: column;
   gap: 8px;
   flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .ds-detail-row {
