@@ -44,6 +44,7 @@
 | 🔍 **View Sync** | Supports cross-database migration of View definitions. |
 | 🚦 **Task Control** | Start, pause, and stop sync tasks at any time. |
 | 📝 **Sync Logs** | Comprehensive logs detailing duration, QPS, and error messages for every sync. |
+| 🎯 **Flexible Schema Configuration** | Supports flexible database/schema configuration for different database types, with task-level schema override. |
 
 ---
 
@@ -152,6 +153,99 @@ The frontend runs at: `http://localhost:5173` by default.
 
 ---
 
+## 📚 Usage Guide
+
+### Data Source and Schema Configuration
+
+The platform supports flexible database/schema configuration for different database types. Understanding how to configure the `dbName` field is crucial for proper synchronization.
+
+#### Data Source Configuration
+
+When creating a data source, the meaning of the `dbName` field varies by database type:
+
+| Database Type | `dbName` Field Meaning | Connection Behavior |
+|--------------|------------------------|---------------------|
+| **Oracle** | Service Name (e.g., `ORCL`, `XE`) | Connects to the service, then switches to the specified schema using `setSchema()` |
+| **MySQL / OceanBase** | Database Name (e.g., `mydb`) | Directly connects to the specified database |
+| **PostgreSQL / GaussDB / DM** | Database Name (e.g., `postgres`) | Connects to the database, then switches to the specified schema using `setSchema()` |
+
+**Configuration Examples:**
+
+```yaml
+# Oracle Data Source
+{
+  "name": "Oracle Production",
+  "dbType": "ORACLE",
+  "host": "192.168.1.100",
+  "port": 1521,
+  "dbName": "ORCL",        # Service Name
+  "username": "HR",         # Schema/User
+  "password": "***"
+}
+
+# MySQL Data Source
+{
+  "name": "MySQL Dev",
+  "dbType": "MYSQL",
+  "host": "192.168.1.101",
+  "port": 3306,
+  "dbName": "business_db",  # Database Name
+  "username": "root",
+  "password": "***"
+}
+
+# PostgreSQL Data Source
+{
+  "name": "PostgreSQL Test",
+  "dbType": "POSTGRESQL",
+  "host": "192.168.1.102",
+  "port": 5432,
+  "dbName": "postgres",     # Database Name
+  "username": "admin",      # User
+  "password": "***"
+}
+```
+
+#### Sync Task Configuration
+
+When creating a sync task, you can specify `sourceSchema` and `targetSchema` to override the data source configuration:
+
+| Database Type | Schema Field Meaning | Priority |
+|--------------|---------------------|----------|
+| **Oracle** | Schema/User Name (e.g., `HR`, `SCOTT`) | Task config > Data source username |
+| **MySQL / OceanBase** | Database Name (e.g., `db1`, `db2`) | Task config > Data source dbName |
+| **PostgreSQL / GaussDB / DM** | Schema Name (e.g., `public`, `app`) | Task config > Data source username |
+
+**Configuration Priority:**
+
+1. If `sourceSchema`/`targetSchema` is specified in the task → Use task configuration
+2. Otherwise → Use data source configuration (`dbName` or `username` depending on database type)
+
+**Typical Scenarios:**
+
+```yaml
+# Scenario 1: Oracle → PostgreSQL (Cross-schema sync)
+Source Data Source:
+  dbType: ORACLE
+  dbName: ORCL          # Service Name
+  username: HR          # Default schema
+
+Sync Task:
+  sourceSchema: SCOTT   # Override to sync from SCOTT schema
+  targetSchema: public  # Sync to PostgreSQL public schema
+
+# Scenario 2: MySQL → MySQL (Cross-database sync)
+Source Data Source:
+  dbType: MYSQL
+  dbName: db_prod       # Production database
+
+Sync Task:
+  sourceSchema: db_prod # Explicitly specify source database
+  targetSchema: db_test # Sync to test database
+```
+
+---
+
 ## 📁 Project Structure
 
 ```text
@@ -179,6 +273,33 @@ DbMigration/
 ---
 
 ## 🔄 Sync Architecture
+
+### Core Features
+
+#### 1. Intelligent Schema/Database Handling
+
+The platform implements smart schema handling logic for different database types:
+
+- **Oracle**: Connects using the service name, then switches to the specified user/schema via `Connection.setSchema()`
+- **MySQL/OceanBase**: Schema equals database name; directly replaces the database name in the connection URL
+- **PostgreSQL/GaussDB/DM**: Connects using the configured database name, then switches to the specified schema via `Connection.setSchema()`
+
+#### 2. Automatic DDL Conversion
+
+Supports cross-database table structure migration with automatic dialect translation:
+
+- **Data Type Mapping**: `NUMBER` → `NUMERIC`, `VARCHAR2` → `VARCHAR`, etc.
+- **Function Compatibility**: `SYSDATE` → `CURRENT_TIMESTAMP`, `NVL` → `COALESCE`, `RAISE_APPLICATION_ERROR` → `RAISE EXCEPTION`, etc.
+- **Constraint Handling**: Automatically converts primary keys, foreign keys, unique constraints, and check constraints
+- **Index Migration**: Supports cross-database migration of regular and unique indexes
+
+#### 3. Table Sync Strategies
+
+| Strategy | Description | Use Case |
+|----------|-------------|----------|
+| **CREATE_IF_NOT_EXISTS** | Creates table if it doesn't exist; skips if exists | Initial migration or incremental table addition |
+| **DROP_AND_CREATE** | Drops existing table and recreates (uses CASCADE to drop foreign key constraints) | Complete table structure rebuild |
+| **SKIP_IF_EXISTS** | Skips table creation if it already exists | Data-only sync without modifying table structure |
 
 ### Single Table Sync Flow (SyncEngine)
 

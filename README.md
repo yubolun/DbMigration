@@ -42,6 +42,7 @@
 | 🛡️ **多数据源管理** | 动态创建、连接池隔离，密码 AES-256 加密存储 |
 | 🏗️ **建表迁移** | 自动将源库 DDL 转换为目标库方言并建表 |
 | 🔍 **视图同步** | 支持视图定义的跨库迁移 |
+| 🎯 **灵活的 Schema 配置** | 支持在同步任务中指定源/目标 Schema/数据库名，独立于数据源配置 |
 | 🚦 **任务控制** | 支持启动、暂停、停止同步任务 |
 | 📝 **同步日志** | 完整记录每次同步的耗时、QPS 和错误信息 |
 
@@ -130,6 +131,49 @@ npm run dev
 
 ---
 
+## 📝 使用说明
+
+### 数据源与 Schema 配置
+
+平台支持灵活的数据库/Schema 配置，适应不同数据库的架构差异：
+
+#### 1. 数据源配置
+
+在「数据源管理」中配置数据库连接信息：
+
+- **MySQL/OceanBase**：`数据库名` 字段填写默认数据库名（如 `mydb`）
+- **Oracle**：`数据库名` 字段填写服务名（如 `ORCL`）
+- **PostgreSQL/GaussDB/达梦**：`数据库名` 字段填写数据库名（如 `postgres`）
+
+#### 2. 同步任务配置
+
+创建同步任务时，可以指定 **源 Schema** 和 **目标 Schema**：
+
+| 数据库类型 | Schema 含义 | 示例 |
+|-----------|-------------|------|
+| **MySQL/OceanBase** | Schema = 数据库名 | `mydb`、`test_db` |
+| **Oracle** | Schema = 用户/命名空间 | `SCOTT`、`HR` |
+| **PostgreSQL/GaussDB/达梦** | Schema = 命名空间 | `public`、`app_schema` |
+
+**配置优先级**：
+- 同步任务中配置的 Schema/数据库名 **优先于** 数据源配置中的数据库名
+- 如果同步任务未指定 Schema，则使用数据源配置中的数据库名
+
+**典型场景**：
+```text
+场景 1：Oracle → PostgreSQL
+  数据源配置：Oracle 服务名 = ORCL
+  同步任务：源 Schema = SCOTT，目标 Schema = public
+  实际连接：Oracle 连接到 ORCL 后切换到 SCOTT，PostgreSQL 连接到配置的数据库后切换到 public
+
+场景 2：MySQL → MySQL（跨库同步）
+  数据源配置：源库数据库名 = db1，目标库数据库名 = db2
+  同步任务：源 Schema = source_db，目标 Schema = target_db
+  实际连接：源库连接到 source_db，目标库连接到 target_db（覆盖数据源配置）
+```
+
+---
+
 ## ⚙️ 配置说明
 
 | 配置项 | 默认值 | 说明 |
@@ -179,6 +223,33 @@ DbMigration/
 ---
 
 ## 🔄 同步架构
+
+### 核心特性
+
+#### 1. Schema/数据库名的灵活处理
+
+平台针对不同数据库类型实现了智能的 Schema 处理逻辑：
+
+- **Oracle**：使用服务名连接后，通过 `Connection.setSchema()` 切换到指定用户/Schema
+- **MySQL/OceanBase**：Schema 即数据库名，直接替换连接 URL 中的数据库名
+- **PostgreSQL/GaussDB/达梦**：使用配置的数据库名连接后，通过 `Connection.setSchema()` 切换到指定 Schema
+
+#### 2. DDL 自动转换
+
+支持跨数据库的表结构迁移，自动处理方言差异：
+
+- **数据类型映射**：`NUMBER` → `NUMERIC`、`VARCHAR2` → `VARCHAR` 等
+- **函数兼容性转换**：`SYSDATE` → `CURRENT_TIMESTAMP`、`NVL` → `COALESCE`、`RAISE_APPLICATION_ERROR` → `RAISE EXCEPTION` 等
+- **约束处理**：自动转换主键、外键、唯一约束、检查约束
+- **索引迁移**：支持普通索引和唯一索引的跨库迁移
+
+#### 3. 表同步策略
+
+| 策略 | 说明 | 适用场景 |
+|------|------|----------|
+| **CREATE_IF_NOT_EXISTS** | 表不存在时创建，存在则跳过 | 首次迁移或增量添加新表 |
+| **DROP_AND_CREATE** | 删除已存在的表后重新创建（使用 CASCADE 级联删除外键约束） | 需要完全重建表结构 |
+| **SKIP_IF_EXISTS** | 表已存在时跳过，不创建 | 仅同步数据，不修改表结构 |
 
 ### 单表同步流程（SyncEngine）
 
