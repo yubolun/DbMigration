@@ -236,4 +236,25 @@ public class GaussDialect implements DbDialect {
         }
         return null;
     }
+
+    @Override
+    public boolean tableExists(Connection conn, String tableName) throws SQLException {
+        // 从连接中获取当前 schema
+        String currentSchema = conn.getSchema();
+        if (currentSchema == null || currentSchema.isBlank()) {
+            currentSchema = "public";
+        }
+
+        String sql = "SELECT EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = ? AND tablename = ?)";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, currentSchema);
+            ps.setString(2, tableName.toLowerCase());
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getBoolean(1);
+                }
+            }
+        }
+        return false;
+    }
 }

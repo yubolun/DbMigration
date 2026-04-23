@@ -192,6 +192,8 @@ public class SyncTaskService {
             request.setTaskName(task.getTaskName());
             request.setSourceDsId(task.getSourceDsId());
             request.setTargetDsId(task.getTargetDsId());
+            request.setSourceSchema(task.getSourceSchema());
+            request.setTargetSchema(task.getTargetSchema());
             request.setSchemaStrategy(task.getSchemaStrategy());
             request.setBatchSize(task.getBatchSize());
             request.setSyncMode(task.getSyncMode());
@@ -640,7 +642,7 @@ public class SyncTaskService {
         try {
             DataSourceConfig srcConfig = dataSourceMapper.selectById(request.getSourceDsId());
             DbDialect srcDialect = dialectFactory.getDialect(srcConfig.getDbType());
-            try (java.sql.Connection srcConn = dsManager.getConnection(request.getSourceDsId())) {
+            try (java.sql.Connection srcConn = dsManager.getConnection(request.getSourceDsId(), request.getSourceSchema())) {
                 List<String> tables = srcDialect.listTables(srcConn, request.getSourceSchema())
                         .stream().map(t -> t.getTableName()).toList();
                 log.info("从源库获取到 {} 张表", tables.size());

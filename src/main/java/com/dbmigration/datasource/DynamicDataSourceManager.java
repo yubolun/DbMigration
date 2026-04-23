@@ -110,11 +110,14 @@ public class DynamicDataSourceManager {
     }
 
     /**
-     * 获取连接并切换到指定 Database/Schema
+     * 获取连接并切换到指定 Schema
      *
-     * 重要：当指定了 schema 参数时，会创建一个新的直连（不使用连接池），
-     * 并使用该 schema 作为数据库名构建 JDBC URL，从而真正连接到指定的数据库。
-     * 这样可以确保忽略数据源配置中的 dbName，使用同步任务中指定的数据库名。
+     * 重要：schema 参数的含义取决于数据库类型和用户配置：
+     * - 对于 Oracle：schema 是用户/命名空间，使用配置中的 dbName（服务名）连接，然后 setSchema()
+     * - 对于 MySQL：schema 就是数据库名，用 schema 替换 dbName
+     * - 对于 PostgreSQL/GaussDB：
+     *   - 如果 schema 为 null/空，使用配置中的 dbName
+     *   - 否则，使用配置中的 dbName 连接，然后 setSchema() 切换到指定 schema
      */
     public Connection getConnection(Long dsId, String schema) throws SQLException {
         // 如果没有指定 schema，或者 schema 为空，使用默认连接池
@@ -122,8 +125,6 @@ public class DynamicDataSourceManager {
             return getConnection(dsId);
         }
 
-        // 如果指定了 schema，创建一个使用该 schema 的新连接
-        // 这样可以确保真正连接到指定的数据库，而不是数据源配置中的数据库
         DataSourceConfig config = dataSourceMapper.selectById(dsId);
         if (config == null) {
             throw new IllegalArgumentException("数据源不存在: id=" + dsId);
@@ -133,21 +134,49 @@ public class DynamicDataSourceManager {
             DbType dbType = DbType.valueOf(config.getDbType());
             String password = AesUtils.decrypt(config.getPassword());
 
-            // 使用指定的 schema 构建 JDBC URL，而不是使用配置中的 dbName
-            String jdbcUrl = dbType.buildUrl(config.getHost(), config.getPort(), schema, config.getExtraParams());
+            // 根据数据库类型决定如何使用 schema 参数
+            String dbNameToUse;
+            boolean needSetSchema = false;
 
-            log.debug("使用指定 schema 创建连接: dsId={}, schema={}, url={}", dsId, schema, jdbcUrl);
+            switch (dbType) {
+                case ORACLE -> {
+                    // Oracle: schema 是用户命名空间，使用配置的服务名连接
+                    dbNameToUse = config.getDbName();
+                    needSetSchema = true;
+                }
+                case MYSQL, OCEANBASE -> {
+                    // MySQL/OceanBase: schema 就是数据库名
+                    dbNameToUse = schema;
+                    needSetSchema = false;
+                }
+                case POSTGRESQL, GAUSSDB, DM -> {
+                    // PostgreSQL/GaussDB/DM: 使用配置的数据库名连接，然后切换 schema
+                    dbNameToUse = config.getDbName();
+                    needSetSchema = true;
+                }
+                default -> {
+                    dbNameToUse = config.getDbName();
+                    needSetSchema = true;
+                }
+            }
+
+            String jdbcUrl = dbType.buildUrl(config.getHost(), config.getPort(), dbNameToUse, config.getExtraParams());
+
+            log.info("【连接调试】dsId={}, dbType={}, schema参数={}, config.dbName={}, 实际使用dbName={}, needSetSchema={}, url={}",
+                    dsId, dbType, schema, config.getDbName(), dbNameToUse, needSetSchema, jdbcUrl);
 
             // 创建直连（不使用连接池）
             Connection conn = DriverManager.getConnection(jdbcUrl, config.getUsername(), password);
 
-            // 对于某些数据库，还需要显式设置 catalog/schema
-            try {
-                conn.setCatalog(schema);
-            } catch (Exception ignored) {}
-            try {
-                conn.setSchema(schema);
-            } catch (Exception ignored) {}
+            // 如果需要，显式设置 schema
+            if (needSetSchema) {
+                try {
+                    conn.setSchema(schema);
+                    log.info("【连接调试】已切换到 schema: {}", schema);
+                } catch (Exception e) {
+                    log.warn("【连接调试】setSchema 失败: {}", e.getMessage());
+                }
+            }
 
             return conn;
         } catch (Exception e) {

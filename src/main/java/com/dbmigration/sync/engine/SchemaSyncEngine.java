@@ -14,6 +14,7 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
 
 import java.sql.Connection;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.*;
 
@@ -207,16 +208,28 @@ public class SchemaSyncEngine {
         // 统一将目标表名转换为目标库适配的大小写
         String targetTableName = normalizeIdentifier(tableName, targetDialect.getDbType());
 
+        log.info("【表同步调试】原始表名={}, 规范化后={}, 目标库类型={}, 当前schema={}",
+                tableName, targetTableName, targetDialect.getDbType(),
+                targetConn.getSchema());
+
         // 检查目标表是否已存在
         boolean exists = targetDialect.tableExists(targetConn, targetTableName);
+
+        log.info("【表同步调试】表 {} 是否存在: {}, 策略: {}", targetTableName, exists, strategy);
 
         if ("CREATE_IF_NOT_EXISTS".equals(strategy) && exists) {
             log.info("目标表已存在, 跳过: {}", targetTableName);
             return;
         }
         if ("DROP_AND_CREATE".equals(strategy) && exists) {
-            // Oracle 不支持 DROP TABLE IF EXISTS，需要先检查表是否存在
-            String dropSql = targetDialect.buildDropTableSql(targetTableName);
+            // 删除表时需要级联删除外键约束
+            String dropSql;
+            if (targetDialect.getDbType() == DbType.POSTGRESQL || targetDialect.getDbType() == DbType.GAUSSDB) {
+                // PostgreSQL/GaussDB: 使用 CASCADE 级联删除依赖对象
+                dropSql = "DROP TABLE IF EXISTS " + targetDialect.quoteIdentifier(targetTableName) + " CASCADE";
+            } else {
+                dropSql = targetDialect.buildDropTableSql(targetTableName);
+            }
             try (Statement stmt = targetConn.createStatement()) {
                 stmt.execute(dropSql);
                 log.info("已删除目标表: {}", targetTableName);
@@ -252,6 +265,15 @@ public class SchemaSyncEngine {
             }
             try {
                 stmt.execute(ddl);
+            } catch (SQLException e) {
+                // 如果是"表已存在"错误，且策略是 CREATE_IF_NOT_EXISTS，则忽略
+                String errMsg = e.getMessage().toLowerCase();
+                if ("CREATE_IF_NOT_EXISTS".equals(strategy) &&
+                    (errMsg.contains("already exists") || errMsg.contains("已存在"))) {
+                    log.warn("表 {} 已存在(并发创建或检测失败)，跳过", targetTableName);
+                    return;
+                }
+                throw e;
             } finally {
                 if (isMysql) {
                     try { stmt.execute("SET SESSION innodb_strict_mode=ON"); } catch (Exception ignored) {}
@@ -306,8 +328,12 @@ public class SchemaSyncEngine {
             throw new RuntimeException("无法获取 " + objectType + " DDL: " + objectName);
         }
 
+        log.debug("原始 {} DDL [{}]:\n{}", objectType, objectName, ddl);
+
         // 清洗 Oracle 特有语法，使 DDL 兼容目标库
         ddl = cleanOracleDdl(ddl);
+
+        log.debug("清洗后 {} DDL [{}]:\n{}", objectType, objectName, ddl);
 
         // DROP_AND_CREATE 策略先尝试删除
         if ("DROP_AND_CREATE".equals(strategy)) {
@@ -418,6 +444,10 @@ public class SchemaSyncEngine {
         // DBMS_OUTPUT.PUT_LINE(...) → RAISE NOTICE '%', ...
         ddl = ddl.replaceAll("(?im)^\\s*DBMS_OUTPUT\\.PUT_LINE\\s*\\((.+?)\\)\\s*;",
                 "RAISE NOTICE '%', $1;");
+        // RAISE_APPLICATION_ERROR(-20001, 'msg') → RAISE EXCEPTION '%', 'msg'
+        // 使用非贪婪匹配，支持嵌套括号和多行
+        ddl = ddl.replaceAll("(?i)RAISE_APPLICATION_ERROR\\s*\\(\\s*-?\\d+\\s*,\\s*([^;]+?)\\s*\\)\\s*;",
+                "RAISE EXCEPTION '%', $1;");
         // UTL_RAW.CAST_TO_RAW(x) → x::bytea  (GaussDB/PG 兼容)
         ddl = ddl.replaceAll("(?i)UTL_RAW\\.CAST_TO_RAW\\s*\\((.+?)\\)", "($1)::bytea");
         // UTL_RAW.CAST_TO_VARCHAR2(x) → encode(x, 'escape')

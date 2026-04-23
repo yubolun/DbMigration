@@ -99,3 +99,25 @@ surefire-reports/
 .antigravityignore
 
 .claude
+src/main/resources/static/assets/CustomSelect-CUTDiw3M.js
+src/main/resources/static/assets/CustomSelect-XtJSrG49.css
+src/main/resources/static/assets/Dashboard-COwreJYa.css
+src/main/resources/static/assets/Dashboard-WrwkppJt.js
+src/main/resources/static/assets/DataSources-B0tbDEyA.js
+src/main/resources/static/assets/DataSources-CrUPcEeb.css
+src/main/resources/static/assets/index-D9OxghH5.js
+src/main/resources/static/assets/index-DvsE4ggY.css
+src/main/resources/static/assets/Logs-BcWE19la.js
+src/main/resources/static/assets/Logs-OGVW6_xN.css
+src/main/resources/static/assets/Pagination-4OcgZxWW.js
+src/main/resources/static/assets/TaskCreate-7cqzhuvS.css
+src/main/resources/static/assets/TaskCreate-CCzUD4dz.js
+src/main/resources/static/assets/Tasks-GUc4CMIn.js
+src/main/resources/static/assets/Tasks-JLCVvGq6.css
+src/main/resources/static/db-icons/default.png
+src/main/resources/static/db-icons/dm.png
+src/main/resources/static/db-icons/gaussdb.png
+src/main/resources/static/db-icons/mysql.png
+src/main/resources/static/db-icons/oceanbase.png
+src/main/resources/static/db-icons/oracle.png
+src/main/resources/static/db-icons/postgresql.png
