@@ -246,7 +246,7 @@ public class OracleDialect implements DbDialect {
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
                     String text = rs.getString(1);
-                    return "CREATE OR REPLACE VIEW " + quoteIdentifier(viewName) + " AS " + text;
+                    return "CREATE OR REPLACE VIEW " + viewName + " AS " + text;
                 }
             }
         }

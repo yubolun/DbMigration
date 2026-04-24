@@ -188,7 +188,7 @@ public class MySqlDialect implements DbDialect {
 
     @Override
     public String getViewDdl(Connection conn, String schema, String viewName) throws SQLException {
-        String sql = "SHOW CREATE VIEW " + quoteIdentifier(viewName);
+        String sql = "SHOW CREATE VIEW " + viewName;
         try (Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
             if (rs.next()) return rs.getString(2);
         }

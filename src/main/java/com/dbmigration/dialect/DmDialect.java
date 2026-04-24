@@ -212,7 +212,7 @@ public class DmDialect implements DbDialect {
             ps.setString(2, viewName.toUpperCase());
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
-                    return "CREATE OR REPLACE VIEW " + quoteIdentifier(viewName) + " AS " + rs.getString(1);
+                    return "CREATE OR REPLACE VIEW " + viewName + " AS " + rs.getString(1);
                 }
             }
         }
